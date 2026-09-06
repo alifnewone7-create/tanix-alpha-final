@@ -27,8 +27,10 @@ def _partial_asset(code):
     return code.replace("_otc", "-OTC")
 
 
-def signal_caption(display, direction, entry_str, reason, payout=0):
-    return messages.signal_caption(display, direction, entry_str, payout, reason, OWNER_TAG)
+def signal_caption(display, direction, entry_str, reason, payout=0,
+                   owner_tag=OWNER_TAG, brand=None):
+    return messages.signal_caption(display, direction, entry_str, payout, reason,
+                                   owner_tag, brand=brand or "TaNix Alpha 2.0")
 
 
 def result_caption(display, direction, entry_str, result, wins=0, losses=0, total_pct=0.0):
@@ -192,6 +194,39 @@ class SessionManager:
             except Exception as e:
                 print(f"[session] send_photo to {ch['title']} failed: {e}")
 
+    async def _broadcast_branded(self, candles, market, direction, entry_ts,
+                                 entry_str, reason, result=None, stats=None):
+        """Render + caption per channel so each channel shows its own branding."""
+        cache = {}
+        for i, ch in enumerate(self.channels):
+            if i:
+                await asyncio.sleep(BROADCAST_GAP)
+            brand = storage.get_channel_brand(ch["id"])
+            png = cache.get(brand["image_name"])
+            if png is None:
+                png = charting.render_chart(
+                    candles, f"{market['display']}  \u00b7  M1", badge=direction,
+                    payout=market.get("payout", 0), entry_ts=entry_ts,
+                    entry_str=entry_str, market_name=market["display"],
+                    result=result, stats=stats, brand=brand["image_name"],
+                )
+                cache[brand["image_name"]] = png
+            if result is None:
+                caption = signal_caption(
+                    market["display"], direction, entry_str, reason,
+                    market.get("payout", 0), owner_tag=brand["owner_tag"],
+                    brand=brand["text_name"])
+            else:
+                st_ = stats or {}
+                caption = result_caption(
+                    market["display"], direction, entry_str, result,
+                    wins=st_.get("wins", 0), losses=st_.get("losses", 0),
+                    total_pct=st_.get("total_pct", 0.0))
+            try:
+                await NOTIFY.send_photo(ch["id"], png, caption)
+            except Exception as e:
+                print(f"[session] send_photo to {ch['title']} failed: {e}")
+
     async def _broadcast_text(self, text):
         for i, ch in enumerate(self.channels):
             if i:
@@ -336,16 +371,8 @@ class SessionManager:
 
         # chart includes the live RUNNING candle from tick data
         candles = await self._candles(market["code"], CHART_CANDLES)
-        png = charting.render_chart(
-            candles, f"{market['display']}  \u00b7  M1", badge=direction,
-            payout=market.get("payout", 0), entry_ts=entry_ts, entry_str=entry_str,
-            market_name=market["display"], result=None,
-        )
-        await self._broadcast_photo(
-            png,
-            signal_caption(market["display"], direction, entry_str, res["reason"],
-                           market.get("payout", 0)),
-        )
+        await self._broadcast_branded(
+            candles, market, direction, entry_ts, entry_str, res["reason"])
 
         await self._sleep_until(entry_ts + 63)
         if not self.active:
@@ -376,16 +403,9 @@ class SessionManager:
                  "total_pct": self.pnl}
 
         fresh = await self._candles(market["code"], CHART_CANDLES) or candles
-        png = charting.render_chart(
-            fresh, f"{market['display']}  \u00b7  M1", badge=direction,
-            payout=market.get("payout", 0), entry_ts=entry_ts, entry_str=entry_str,
-            market_name=market["display"], result=result, stats=stats,
-        )
-        await self._broadcast_photo(
-            png,
-            result_caption(market["display"], direction, entry_str, result,
-                           wins=wins, losses=losses, total_pct=self.pnl),
-        )
+        await self._broadcast_branded(
+            fresh, market, direction, entry_ts, entry_str, res["reason"],
+            result=result, stats=stats)
 
         record = {
             "session_id": self.session_id,

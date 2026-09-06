@@ -68,10 +68,11 @@ def _dir_emoji(direction):
     return em("call") if direction == "CALL" else em("put")
 
 
-def signal_caption(display, direction, entry_str, payout, reason, owner_tag):
+def signal_caption(display, direction, entry_str, payout, reason, owner_tag,
+                   brand="TaNix Alpha 2.0"):
     payout_str = f"{int(payout)}%" if payout else "\u2014"
     return (
-        f"{em('brand')} {mono('TaNix Alpha 2.0')} {em('brand')}\n"
+        f"{em('brand')} {mono(brand)} {em('brand')}\n"
         f"{LINE}\n\n"
         f"{em('asset')} {mono('Asset')} : {mono(display)}\n\n"
         f"{em('signal')} {mono('Signal')} : {_dir_emoji(direction)} {mono(direction)}\n"

@@ -56,7 +56,7 @@ CATEGORY_LABELS = {
 # in-memory UI state (single admin bot)
 UI = {"category": None, "markets": [], "page": 0, "selected": {},
       "auto": None, "auto_cat": None, "await_pct": False,
-      "channels": {}}
+      "channels": {}, "await_brand": None}
 
 MAX_SESSION_CHANNELS = 2
 
@@ -80,8 +80,34 @@ MAIN_TEXT = "\u2728 TaNix Alpha 2.0 \u2728\n\nSelect an option below:"
 
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Capture custom % value when Auto Select is waiting for it."""
+    """Capture custom % value or a per-channel branding value."""
     if not is_admin(update):
+        return
+
+    pending = UI.get("await_brand")
+    if pending:
+        key, cid = pending["key"], pending["cid"]
+        field = next((f for f in BRAND_FIELDS if f[0] == key), None)
+        label = field[2] if field else key
+        value = (update.message.text or "").strip()
+        if not value:
+            await update.message.reply_text(f"\u26a0\ufe0f Please send a valid {label}.")
+            return
+        if len(value) > BRAND_MAX_LEN:
+            await update.message.reply_text(
+                f"\u26a0\ufe0f Too long \u2014 max {BRAND_MAX_LEN} characters "
+                f"(you sent {len(value)}).")
+            return
+        if not storage.set_channel_brand(cid, key, value):
+            UI["await_brand"] = None
+            await update.message.reply_text("\u274c Channel not found anymore.")
+            return
+        UI["await_brand"] = None
+        ch = storage.get_channel(cid)
+        text, kb = channel_settings_view(cid)
+        await update.message.reply_text(
+            f"\u2705 {label} updated for \U0001f4e2 {ch['title']}\n\nNew value: {value}")
+        await update.message.reply_text(text, reply_markup=kb)
         return
 
     if not UI.get("await_pct"):
@@ -118,6 +144,20 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------- Add Channel ----------
 
 async def show_add_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    channels = storage.get_channels()
+    if len(channels) >= storage.MAX_CHANNELS:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=(f"\u26a0\ufe0f Channel limit reached ({len(channels)}/{storage.MAX_CHANNELS})\n\n"
+                  f"You cannot add more than {storage.MAX_CHANNELS} channels.\n"
+                  f"\U0001f449 Remove a channel from \U0001f4e2 My Channels first, "
+                  f"then add the new one."),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("\U0001f4e2 My Channels", callback_data="m|my")],
+                [InlineKeyboardButton("\u2b05\ufe0f Back", callback_data="m|main")],
+            ]),
+        )
+        return
     kb = ReplyKeyboardMarkup(
         [[KeyboardButton(
             "\U0001f4e2 Select Channel",
@@ -127,7 +167,7 @@ async def show_add_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=("\u2795 Add Channel\n\n"
+        text=(f"\u2795 Add Channel  ({len(channels)}/{storage.MAX_CHANNELS} used)\n\n"
               "1\ufe0f\u20e3 First make this bot an ADMIN in your channel\n"
               "2\ufe0f\u20e3 Then tap the button below and select the channel"),
         reply_markup=kb,
@@ -153,8 +193,19 @@ async def on_chat_shared(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardRemove(),
         )
         return
-    added = storage.add_channel(chat_id, chat.title or str(chat_id))
-    msg = "\u2705 Channel successfully added!" if added else "\u2139\ufe0f Channel already connected (updated)."
+    status = storage.add_channel(chat_id, chat.title or str(chat_id))
+    if status == "limit":
+        await update.message.reply_text(
+            f"\u26a0\ufe0f Channel limit reached!\n\n"
+            f"You can connect a maximum of {storage.MAX_CHANNELS} channels.\n"
+            f"\U0001f449 Remove a channel from \U0001f4e2 My Channels first, then add this one.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=MAIN_TEXT,
+                                       reply_markup=main_menu_kb())
+        return
+    msg = ("\u2705 Channel successfully added!" if status == "added"
+           else "\u2139\ufe0f Channel already connected (updated).")
     await update.message.reply_text(
         f"{msg}\n\n\U0001f4e2 {chat.title}\n\U0001f194 {chat_id}",
         reply_markup=ReplyKeyboardRemove(),
@@ -193,11 +244,69 @@ def my_channels_view():
         text = "\U0001f4e2 My Channels\n\nNo channels connected yet.\nUse \u2795 Add Channel first."
         rows = []
     else:
-        text = f"\U0001f4e2 My Channels ({len(channels)})\n\nTap \u274c to disconnect a channel."
-        rows = [[InlineKeyboardButton(f"\U0001f4e2 {c['title']}", callback_data="noop"),
+        text = (f"\U0001f4e2 My Channels ({len(channels)}/{storage.MAX_CHANNELS})\n\n"
+                "Tap a channel to change its Image Name, Text Name or Owner Tag.\n"
+                "Tap \u274c to disconnect it.")
+        rows = [[InlineKeyboardButton(f"\U0001f4e2 {c['title']}", callback_data=f"ch|{c['id']}"),
                  InlineKeyboardButton("\u274c", callback_data=f"rm|{c['id']}")] for c in channels]
     rows.append([InlineKeyboardButton("\u2b05\ufe0f Back", callback_data="m|main")])
     return text, InlineKeyboardMarkup(rows)
+
+
+# ---------- Per-channel branding ----------
+
+BRAND_FIELDS = [
+    ("image_name", "\U0001f5bc Change Image Name", "Image Name",
+     "This name is drawn on the signal/result chart image."),
+    ("text_name",  "\U0001f524 Change Text Name",  "Text Name",
+     "This name is the headline of the signal message text (same stylised font)."),
+    ("owner_tag",  "\U0001f451 Change Owner Tag",  "Owner Tag",
+     "This is the Owner value shown in the signal message."),
+]
+BRAND_MAX_LEN = 40
+BRAND_LINE = "\u2501" * 20
+
+
+def channel_settings_view(cid):
+    ch = storage.get_channel(cid)
+    if not ch:
+        return ("\u26a0\ufe0f Channel not found.",
+                InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Back",
+                                                            callback_data="m|my")]]))
+    b = storage.get_channel_brand(cid)
+    text = (f"\u2699\ufe0f Channel Settings\n\n"
+            f"\U0001f4e2 {ch['title']}\n"
+            f"\U0001f194 {cid}\n"
+            f"{BRAND_LINE}\n"
+            f"\U0001f5bc Image Name : {b['image_name']}\n"
+            f"\U0001f524 Text Name  : {b['text_name']}\n"
+            f"\U0001f451 Owner Tag  : {b['owner_tag']}\n"
+            f"{BRAND_LINE}\n\n"
+            f"These settings apply to THIS channel only.")
+    rows = [[InlineKeyboardButton(label, callback_data=f"cb|{key}|{cid}")]
+            for key, label, _, _ in BRAND_FIELDS]
+    rows.append([InlineKeyboardButton("\u267b\ufe0f Reset to Default",
+                                      callback_data=f"crst|{cid}")])
+    rows.append([InlineKeyboardButton("\u2b05\ufe0f Back", callback_data="m|my")])
+    return text, InlineKeyboardMarkup(rows)
+
+
+def brand_prompt_view(key, cid):
+    ch = storage.get_channel(cid)
+    field = next((f for f in BRAND_FIELDS if f[0] == key), None)
+    b = storage.get_channel_brand(cid)
+    title = field[2]
+    hint = field[3]
+    text = (f"\u270f\ufe0f Change {title}\n\n"
+            f"\U0001f4e2 {ch['title'] if ch else cid}\n"
+            f"Current: {b[key]}\n\n"
+            f"{hint}\n\n"
+            f"Send the new {title.lower()} as a reply "
+            f"(max {BRAND_MAX_LEN} characters).")
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("\u2716\ufe0f Cancel",
+                                                     callback_data=f"ch|{cid}")]])
+    return text, kb
+
 
 
 # ---------- Start Session: categories & market selection ----------
@@ -409,9 +518,44 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "m|my":
+        UI["await_brand"] = None
         await q.answer()
         text, kb = my_channels_view()
         await q.edit_message_text(text, reply_markup=kb)
+        return
+
+    if data.startswith("ch|"):
+        UI["await_brand"] = None
+        cid = int(data[3:])
+        await q.answer()
+        text, kb = channel_settings_view(cid)
+        await q.edit_message_text(text, reply_markup=kb)
+        return
+
+    if data.startswith("cb|"):
+        _, key, cid_s = data.split("|", 2)
+        cid = int(cid_s)
+        if not storage.get_channel(cid):
+            await q.answer("Channel not found", show_alert=True)
+            return
+        if key not in storage.BRAND_KEYS:
+            await q.answer("Unknown setting", show_alert=True)
+            return
+        UI["await_brand"] = {"cid": cid, "key": key}
+        UI["await_pct"] = False
+        await q.answer()
+        text, kb = brand_prompt_view(key, cid)
+        await q.edit_message_text(text, reply_markup=kb)
+        return
+
+    if data.startswith("crst|"):
+        cid = int(data[5:])
+        storage.reset_channel_brand(cid)
+        UI["await_brand"] = None
+        await q.answer("Reset to default \u2705")
+        text, kb = channel_settings_view(cid)
+        with contextlib.suppress(Exception):
+            await q.edit_message_text(text, reply_markup=kb)
         return
 
     if data.startswith("rm|"):

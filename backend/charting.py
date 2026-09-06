@@ -110,8 +110,28 @@ def _rbox(ax, x, y, w, h, fc, ec, lw=1.0, alpha=1.0, pad=0.008, z=3):
 
 # ---- main render ---------------------------------------------------------
 
+def _draw_brand(fig, brand):
+    """Header brand wordmark: first word in white, the rest in the accent colour."""
+    parts = str(brand or "").strip().split(" ", 1)
+    head = parts[0] if parts and parts[0] else "TaNix"
+    tail = parts[1].strip() if len(parts) > 1 else ""
+    x0 = 0.058
+    t1 = fig.text(x0, 0.945, head, color=TEXT, fontsize=16, fontweight="bold",
+                  va="center", ha="left", family=FSANS)
+    if not tail:
+        return
+    try:
+        renderer = fig.canvas.get_renderer()
+        width = t1.get_window_extent(renderer=renderer).width / fig.bbox.width
+    except Exception:
+        width = len(head) * 0.0098
+    fig.text(x0 + width + 0.007, 0.945, tail, color=ACCENT, fontsize=16,
+             fontweight="bold", va="center", ha="left", family=FSANS)
+
+
 def render_chart(candles, title, badge=None, *, payout=0, entry_ts=None,
-                 entry_str=None, market_name=None, result=None, stats=None):
+                 entry_str=None, market_name=None, result=None, stats=None,
+                 brand="TaNix Alpha 2.0"):
     """Render the dashboard PNG and return raw bytes.
 
     badge        : "CALL" / "PUT"  (the signal direction)
@@ -279,10 +299,7 @@ def render_chart(candles, title, badge=None, *, payout=0, entry_ts=None,
     fig.patches.append(RegularPolygon(
         (0.034, 0.945), numVertices=6, radius=0.0065, orientation=0,
         transform=fig.transFigure, facecolor=ACCENT, edgecolor="none"))
-    fig.text(0.058, 0.945, "TaNix", color=TEXT, fontsize=16, fontweight="bold",
-             va="center", ha="left", family=FSANS)
-    fig.text(0.108, 0.945, "Alpha 2.0", color=ACCENT, fontsize=16, fontweight="bold",
-             va="center", ha="left", family=FSANS)
+    _draw_brand(fig, brand)
 
     # -- center: big CALL/PUT badge (no confidence)
     d_col = CALL_COL if direction == "CALL" else PUT_COL
