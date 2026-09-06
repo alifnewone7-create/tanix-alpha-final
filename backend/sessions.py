@@ -202,15 +202,17 @@ class SessionManager:
             if i:
                 await asyncio.sleep(BROADCAST_GAP)
             brand = storage.get_channel_brand(ch["id"])
-            png = cache.get(brand["image_name"])
+            key = (brand["image_name"], brand["engine_name"])
+            png = cache.get(key)
             if png is None:
                 png = charting.render_chart(
                     candles, f"{market['display']}  \u00b7  M1", badge=direction,
                     payout=market.get("payout", 0), entry_ts=entry_ts,
                     entry_str=entry_str, market_name=market["display"],
                     result=result, stats=stats, brand=brand["image_name"],
+                    engine_name=brand["engine_name"],
                 )
-                cache[brand["image_name"]] = png
+                cache[key] = png
             if result is None:
                 caption = signal_caption(
                     market["display"], direction, entry_str, reason,

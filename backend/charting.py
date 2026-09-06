@@ -131,7 +131,7 @@ def _draw_brand(fig, brand):
 
 def render_chart(candles, title, badge=None, *, payout=0, entry_ts=None,
                  entry_str=None, market_name=None, result=None, stats=None,
-                 brand="TaNix Alpha 2.0"):
+                 brand="TaNix Alpha 2.0", engine_name="TaNix Ultra Volt"):
     """Render the dashboard PNG and return raw bytes.
 
     badge        : "CALL" / "PUT"  (the signal direction)
@@ -322,15 +322,17 @@ def render_chart(candles, title, badge=None, *, payout=0, entry_ts=None,
                   fontweight="bold", ha="center", va="center", family=FMONO, zorder=5)
 
     def engine_section(title_y, box_y, h=0.078):
-        """Premium 'ENGINE' card — TaNix Ultra Volt."""
+        """Premium 'ENGINE' card — name is per-channel configurable."""
         stitle(title_y, "ENGINE", ENGINE_COL)
         # soft outer glow frame
         _rbox(side, 0.045, box_y - 0.007, 0.91, h + 0.014, "#121a2a", ENGINE_COL,
               lw=0.8, alpha=0.40, z=3)
         _rbox(side, 0.06, box_y, 0.88, h, PANEL2, ENGINE_COL, lw=1.6, z=4)
         cy = box_y + h / 2
-        side.text(0.5, cy + 0.014, "TaNix Ultra Volt", transform=side.transAxes,
-                  color=ENGINE_COL, fontsize=13, fontweight="bold",
+        label = str(engine_name or "").strip() or "TaNix Ultra Volt"
+        fs = 13 if len(label) <= 17 else (11 if len(label) <= 22 else 9.5)
+        side.text(0.5, cy + 0.014, label, transform=side.transAxes,
+                  color=ENGINE_COL, fontsize=fs, fontweight="bold",
                   ha="center", va="center", family=FSANS, zorder=5)
         side.text(0.5, cy - 0.020, "\u25c6  PRECISION ENGINE  \u25c6",
                   transform=side.transAxes, color=DIM, fontsize=7.5,

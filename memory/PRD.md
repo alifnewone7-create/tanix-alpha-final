@@ -15,7 +15,9 @@ Import `github.com/alifnewone7-create/tanix` @ `main` (`8df35ca`) byte-for-byte.
 
 ## Feature: Per-channel branding + 10-channel cap (June 2026)
 Channel-scoped overrides stored inside each entry of `backend/data/channels.json`
-(`image_name`, `text_name`, `owner_tag`); unset keys fall back to global defaults.
+(`image_name`, `text_name`, `owner_tag`, `engine_name`); unset keys fall back to
+global defaults. Engine name renders inside the gold ENGINE card on the chart
+(font auto-shrinks at 18+ / 23+ chars so long names still fit).
 
 - `storage.py`: `MAX_CHANNELS = 10`, `BRAND_KEYS`, `DEFAULT_BRAND`, `get_channel`,
   `get_channel_brand`, `set_channel_brand`, `reset_channel_brand`.

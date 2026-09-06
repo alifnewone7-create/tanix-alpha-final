@@ -262,6 +262,8 @@ BRAND_FIELDS = [
      "This name is the headline of the signal message text (same stylised font)."),
     ("owner_tag",  "\U0001f451 Change Owner Tag",  "Owner Tag",
      "This is the Owner value shown in the signal message."),
+    ("engine_name", "\u26a1 Change Engine Name", "Engine Name",
+     "This is the name inside the ENGINE card on the chart image."),
 ]
 BRAND_MAX_LEN = 40
 BRAND_LINE = "\u2501" * 20
@@ -281,6 +283,7 @@ def channel_settings_view(cid):
             f"\U0001f5bc Image Name : {b['image_name']}\n"
             f"\U0001f524 Text Name  : {b['text_name']}\n"
             f"\U0001f451 Owner Tag  : {b['owner_tag']}\n"
+            f"\u26a1 Engine Name : {b['engine_name']}\n"
             f"{BRAND_LINE}\n\n"
             f"These settings apply to THIS channel only.")
     rows = [[InlineKeyboardButton(label, callback_data=f"cb|{key}|{cid}")]

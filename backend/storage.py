@@ -22,11 +22,13 @@ def _save(path, data):
 MAX_CHANNELS = 10
 
 BRAND_NAME = "TaNix Alpha 2.0"
-BRAND_KEYS = ("image_name", "text_name", "owner_tag")
+ENGINE_NAME = "TaNix Ultra Volt"
+BRAND_KEYS = ("image_name", "text_name", "owner_tag", "engine_name")
 DEFAULT_BRAND = {
     "image_name": BRAND_NAME,
     "text_name": BRAND_NAME,
     "owner_tag": OWNER_TAG,
+    "engine_name": ENGINE_NAME,
 }
 
 
